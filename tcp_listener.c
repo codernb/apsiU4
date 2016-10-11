@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <signal.h>
+#include <string.h>
 
 const char* outputFileName = "input_data";
 const char* outputTempFileName = "input_data.tmp";
@@ -138,35 +140,31 @@ void endRequest() {
     close(instanceSocket);
 }
 
-int main () {
-    setUpServerSocketAddress();
-    setUpServerSocket();
-    bindServerSocket();
-
+void handleRequests() {
     while (1) {
         acceptRequest();
         readInput();
-        
         if (!validateInput()) {
             close(instanceSocket);
             continue; 
         }
-        
         openOutputFile();
         writeToOutputFile();
         closeOutputFile();
         renameOutputFile();
-        
         openInputFile();
         readInputFile();
         closeInputFile();
         unlinkInputFile();
-
         writeAnswer();
         endRequest();
     }
-    
-    unlinkOutputFile();
-    close(serverSocket);
+}
+
+int main () {
+    setUpServerSocketAddress();
+    setUpServerSocket();
+    bindServerSocket();
+    handleRequests();
 }
 
