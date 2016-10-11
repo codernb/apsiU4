@@ -1,9 +1,9 @@
 #!/bin/bash
 
-gcc tcp_listener.c -o tcp_listener
-gcc worker.c -o worker
+gcc tcp_listener.c -o tcp_listener.out
+gcc worker.c -o worker.out
 
-./tcp_listener & ./worker &
+./tcp_listener.out & ./worker.out &
 
 result="$(echo xxx | nc localhost 8500)"
 

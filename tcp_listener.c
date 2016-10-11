@@ -47,7 +47,7 @@ int main () {
   //XXX: 4. never used char* in_file_tmp = "result_data.tmp";
   serverAddress.sin_family = AF_INET;
   serverAddress.sin_port = htons(8500);    
-  serverAddress.sin_addr.s_addr = inet_addr("localhost");                                   
+  serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");                                   
    
   serverSocket = socket(AF_INET, SOCK_STREAM, 0);
   on_error(serverSocket, "\nSocket creation:\n"); 
@@ -68,7 +68,6 @@ int main () {
 
     inputLength = read(instanceSocket, &readBuffer, 100);
     on_error(inputLength, "error accepting connection");
-    //XXX: jup, there is 3.
     if (inputLength == 0) {
       close(instanceSocket);
       continue; 
