@@ -10,6 +10,7 @@
 //
 // Note:   To exit a telnet-session give <crtl>-] 
 //         and then the command "quit"
+//         or simply press Ctrs + AltGr + 9
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,100 +20,153 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <errno.h>
-
-//XXX: 2. missing include
 #include <arpa/inet.h>
 
-void on_error(int errorCode, char* message) {
-  if (errorCode == -1) {
+const char* outputFileName = "input_data";
+const char* outputTempFileName = "input_data.tmp";
+const char* inputFileName = "result_data";
+
+struct sockaddr_in serverSocketAddress, instanceAddress;
+int serverSocket, instanceSocket;
+int instanceAddressSize = sizeof(instanceAddress);
+
+char readBuffer[100], writeBuffer[100];
+int outputFileHandler, inputFileHandler;
+ssize_t inputLength, writeLength, readLength;
+
+void cleanUp() {
+    close(instanceSocket);
+    close(serverSocket);
+    close(outputFileHandler);
+    close(inputFileHandler);
+    unlink(outputFileName);
+    unlink(inputFileName);
+}
+
+void check(int errorCode, char* message) {
+    if (errorCode != -1)
+        return;
     perror(message);
-    exit(-1);//XXX: 1. Unreleased resources on error
-  }
+    cleanUp();
+    exit(-1);
 }
 
-int main () {  
-  int serverSocket, instanceSocket;
-  struct sockaddr_in  serverAddress, instanceAddress;
-  int instanceAddressSize;
-  char readBuffer[100], writeBuffer[100];
-  int errorCode;
-  int outputFileHandler, inputFileHandler;
-  ssize_t inputLength, writeLength, readLength;
-  //XXX: 4.1 out_len, never used
+void setUpServerSocketAddress() {
+    serverSocketAddress.sin_family = AF_INET;
+    serverSocketAddress.sin_port = htons(8500);    
+    serverSocketAddress.sin_addr.s_addr = inet_addr("127.0.0.1");                                   
+}
 
-  char* outputFileName = "input_data";
-  char* outputTempFileName = "input_data.tmp";
-  char* inputFile = "result_data";
-  
-  //XXX: 4. never used char* in_file_tmp = "result_data.tmp";
-  serverAddress.sin_family = AF_INET;
-  serverAddress.sin_port = htons(8500);    
-  serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");                                   
-   
-  serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-  on_error(serverSocket, "\nSocket creation:\n"); 
+void setUpServerSocket() {
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    check(serverSocket, "\nSocket creation:\n"); 
+}
 
-  errorCode = bind(serverSocket, (struct sockaddr*) &serverAddress, 
-	     sizeof(serverAddress));
-  on_error(errorCode, "\n socket binding:\n");
-  
-  errorCode = listen(serverSocket, 1);
-  on_error(errorCode, "\nQueue setting:\n");
+void bindServerSocket() {
+    check(bind(serverSocket, (struct sockaddr*) &serverSocketAddress, sizeof(serverSocketAddress)), "\n socket binding:\n");
+    check(listen(serverSocket, 1), "\nQueue setting:\n");
+}
 
-  while (1) {//XXX: 3. never shuts down gracefully (leaving sockets open?)
-    // accept requests, 
-    instanceAddressSize = sizeof(instanceAddress);
-    instanceSocket = accept(serverSocket, (struct sockaddr*) &instanceAddress,
-                       &instanceAddressSize);
-    on_error(instanceSocket, "\n socket instance creation:\n");
+void acceptRequest() {
+    instanceSocket = accept(serverSocket, (struct sockaddr*) &instanceAddress, &instanceAddressSize);
+    check(instanceSocket, "\n socket instance creation:\n");
+}
 
+void readInput() {
     inputLength = read(instanceSocket, &readBuffer, 100);
-    on_error(inputLength, "error accepting connection");
-    if (inputLength == 0) {
-      close(instanceSocket);
-      continue; 
-    }
-    
-    outputFileHandler = open(outputTempFileName, O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
-    on_error(outputFileHandler, "error creating output file");
-    
-    writeLength = write(outputFileHandler, readBuffer, inputLength);
-    on_error(writeLength, "error creating output file");
-    
-    if (writeLength != inputLength) {
-      fprintf(stderr, "short write to disk");
-      exit(-1);
-    }
-    
-    errorCode = close(outputFileHandler);
-    on_error(errorCode, "error creating output file");
-
-    errorCode = rename(outputTempFileName, outputFileName);  
-    on_error(errorCode, "error renaming file");    
-    
-    while (1) {
-      inputFileHandler = open(inputFile, O_RDONLY);
-      if (inputFileHandler == -1 && errno == ENOENT) {
-        // file does not exist
-        sleep(1);
-        continue;
-      }
-      on_error(inputFileHandler, "error opening input file");
-      break;
-    }
-
-    readLength = read(inputFileHandler, writeBuffer, 100);
-    on_error(readLength, "error reading file");
-    
-    errorCode = close(inputFileHandler);
-    on_error(errorCode, "error closing file after read");
-
-    errorCode = unlink(inputFile);
-    on_error(errorCode, "error unlinking input file");
-    
-    write(instanceSocket, &writeBuffer, readLength);
-    close(instanceSocket);               // clean up
-  }  
-  close(serverSocket);                // clean up
+    check(inputLength, "error accepting connection");
 }
-  
+
+int validateInput() {
+    return inputLength > 2;
+}
+
+void openOutputFile() {
+    outputFileHandler = open(outputTempFileName, O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
+    check(outputFileHandler, "error creating output file");
+}
+
+void writeToOutputFile() {
+    writeLength = write(outputFileHandler, readBuffer, inputLength);
+    check(writeLength, "error creating output file");
+    if (writeLength != inputLength)
+        check(-1, "short write to disk");
+}
+
+void closeOutputFile() {
+    check(close(outputFileHandler), "error creating output file");
+}
+
+void renameOutputFile() {
+    check(rename(outputTempFileName, outputFileName), "error renaming file"); 
+}
+
+void unlinkOutputFile() {
+    check(unlink(outputFileName), "error unlinking output file");
+}
+
+void openInputFile() {
+    while (1) {
+        inputFileHandler = open(inputFileName, O_RDONLY);
+        if (inputFileHandler == -1 && errno == ENOENT) {
+            sleep(1);
+            continue;
+        }
+        check(inputFileHandler, "error opening input file");
+        break;
+    }
+}
+
+void readInputFile() {
+    readLength = read(inputFileHandler, writeBuffer, 100);
+    check(readLength, "error reading file");
+}
+
+void closeInputFile() {
+    check(close(inputFileHandler), "error closing file after read");
+}
+
+void unlinkInputFile() {
+    check(unlink(inputFileName), "error unlinking input file");
+}
+
+void writeAnswer() {
+    write(instanceSocket, &writeBuffer, readLength);
+}
+
+void endRequest() {
+    close(instanceSocket);
+}
+
+int main () {
+    setUpServerSocketAddress();
+    setUpServerSocket();
+    bindServerSocket();
+
+    while (1) {
+        acceptRequest();
+        readInput();
+        
+        if (!validateInput()) {
+            close(instanceSocket);
+            continue; 
+        }
+        
+        openOutputFile();
+        writeToOutputFile();
+        closeOutputFile();
+        renameOutputFile();
+        
+        openInputFile();
+        readInputFile();
+        closeInputFile();
+        unlinkInputFile();
+
+        writeAnswer();
+        endRequest();
+    }
+    
+    unlinkOutputFile();
+    close(serverSocket);
+}
+
