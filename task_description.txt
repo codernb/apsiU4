@@ -1,0 +1,42 @@
+Task
+
+You are given a pair of programs, tcp_listener.c and worker.c
+They perform the following task: 
+
+  If you connect to the address 127.0.0.1 port 8500/tcp and
+  send a string of 3 characters in lowercase, they are 
+  converted to uppercase and sent back to you. After that
+  the connection is closed.
+
+While the functionality is already seperated into a front-end 
+and a worker component, no security measures are there, except
+for some error checking. That means the program works, but
+only if the input is as expected. A sample exhance may look like
+this:
+
+  $ telnet 127.0.0.1 8500
+  Trying 127.0.0.1...
+  Connected to 127.0.0.1.
+  Escape character is '^]'.
+  xxx
+  XXX
+  Connection closed by foreign host.
+  $
+
+where "xxx" is your input and "XXX" was echoed back some
+sconds later.
+
+Your tasks are the following:
+1. Understand the code (hint: rename() is atomic on Linux)
+2. Add input validation
+3. Determine whether input normalization is appropriate
+   and if so, implement it.
+4. Confine the two programs with chroot(2) to specific directories
+   and set their permissions so that each program has only
+   the minimal privileges needed
+5. Use setgid(2) and setuid(2) to drop privileges
+6. Set directory permissions and Owner/Group/Other so that each 
+   program has only the access needed
+7. (optional) fix any other bad code you see
+
+
