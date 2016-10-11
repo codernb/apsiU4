@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -24,17 +25,18 @@
 #include <signal.h>
 #include <string.h>
 
+const char* root = ".";
 const char* outputFileName = "input_data";
-const char* outputTempFileName = "input_data.tmp";
+const char* outputTempFileName = "/input_data.tmp";
 const char* inputFileName = "result_data";
 
 struct sockaddr_in serverSocketAddress, instanceAddress;
-int serverSocket, instanceSocket;
 int instanceAddressSize = sizeof(instanceAddress);
+int serverSocket, instanceSocket;
 
 char readBuffer[100], writeBuffer[100];
 int outputFileHandler, inputFileHandler;
-ssize_t inputLength, writeLength, readLength;
+ssize_t inputLength, readLength;
 
 void cleanUp() {
     close(instanceSocket);
@@ -51,6 +53,15 @@ void check(int errorCode, char* message) {
     perror(message);
     cleanUp();
     exit(-1);
+}
+
+void dropPrivileges() {
+    struct stat directoryStatus;
+    chroot(root);
+    chdir(root);
+    stat(root, &directoryStatus);
+    check(setgid(directoryStatus.st_gid), "error setgid");
+    check(setuid(directoryStatus.st_uid), "error setuid");
 }
 
 void setUpServerSocketAddress() {
@@ -89,7 +100,7 @@ void openOutputFile() {
 }
 
 void writeToOutputFile() {
-    writeLength = write(outputFileHandler, readBuffer, inputLength);
+    int writeLength = write(outputFileHandler, readBuffer, inputLength);
     check(writeLength, "error creating output file");
     if (writeLength != inputLength)
         check(-1, "short write to disk");
@@ -144,24 +155,29 @@ void handleRequests() {
     while (1) {
         acceptRequest();
         readInput();
+        
         if (!validateInput()) {
             close(instanceSocket);
             continue; 
         }
+        
         openOutputFile();
         writeToOutputFile();
         closeOutputFile();
         renameOutputFile();
+        
         openInputFile();
         readInputFile();
         closeInputFile();
         unlinkInputFile();
+        
         writeAnswer();
         endRequest();
     }
 }
 
 int main () {
+    dropPrivileges();
     setUpServerSocketAddress();
     setUpServerSocket();
     bindServerSocket();

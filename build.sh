@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ "$EUID" -ne 0 ]
+  then echo "Please run as root"
+  exit
+fi
+
 echo "Compiling"
 gcc tcp_listener.c -o tcp_listener.out
 gcc worker.c -o worker.out
